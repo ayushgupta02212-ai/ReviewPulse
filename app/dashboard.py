@@ -1,9 +1,15 @@
 import streamlit as st
 import pandas as pd
-import requests
 import os
+import pickle
+import string
 import matplotlib.pyplot as plt
 import altair as alt
+
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
 
 # Set page config
 st.set_page_config(
@@ -122,20 +128,64 @@ df_reviews = pd.read_csv(processed_reviews_path)
 df_aspects = pd.read_csv(aspect_insights_path)
 
 # ==========================================
-# Sidebar Settings / Status Check
+# Serverless NLP Model Loading & Preprocessing
 # ==========================================
-st.sidebar.title("Configuration & Services")
-api_url = st.sidebar.text_input("FastAPI Engine URL", value="http://127.0.0.1:8000")
 
-# Check API health
+# Initialize NLTK resources dynamically
+@st.cache_resource
+def setup_nltk():
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords')
+    try:
+        nltk.data.find('corpora/wordnet')
+    except LookupError:
+        nltk.download('wordnet')
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt')
+    return set(stopwords.words('english')), WordNetLemmatizer()
+
+stop_words, lemmatizer = setup_nltk()
+
+def clean_text(text: str) -> str:
+    if not text or not isinstance(text, str):
+        return ""
+    text = text.lower()
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    tokens = word_tokenize(text)
+    cleaned_tokens = [lemmatizer.lemmatize(token) for token in tokens if token not in stop_words]
+    return " ".join(cleaned_tokens)
+
+# Cache loading of machine learning models
+@st.cache_resource
+def load_nlp_models():
+    tfidf_path = os.path.join("models", "tfidf_vectorizer.pkl")
+    nb_path = os.path.join("models", "naive_bayes_model.pkl")
+    
+    if not os.path.exists(tfidf_path) or not os.path.exists(nb_path):
+        raise FileNotFoundError("Model binary files are missing. Ensure vectorize.py and train_models.py have run.")
+        
+    with open(tfidf_path, "rb") as f:
+        tfidf = pickle.load(f)
+    with open(nb_path, "rb") as f:
+        nb = pickle.load(f)
+    return tfidf, nb
+
+# ==========================================
+# Sidebar Model Configuration & Status Check
+# ==========================================
+st.sidebar.title("Model Configuration")
+
 try:
-    health_resp = requests.get(f"{api_url}/health", timeout=2)
-    if health_resp.status_code == 200 and health_resp.json().get("status") == "healthy":
-        st.sidebar.success("🟢 FastAPI Backend Engine is online!")
-    else:
-        st.sidebar.warning("🟡 FastAPI Backend returned unhealthy status.")
-except Exception:
-    st.sidebar.error("🔴 FastAPI Backend Engine is offline.")
+    tfidf_vectorizer, nb_model = load_nlp_models()
+    st.sidebar.success("🟢 Local Inference Models Loaded!")
+    st.sidebar.info("Dashboard running in serverless mode on Streamlit Cloud.")
+except Exception as e:
+    st.sidebar.error(f"🔴 Error loading models: {str(e)}")
+    tfidf_vectorizer, nb_model = None, None
 
 # ==========================================
 # Main Layout Tabs
@@ -256,46 +306,57 @@ with tab_prediction:
     if st.button("Predict Sentiment 🔮", use_container_width=True):
         if not review_input.strip():
             st.warning("Please enter some text to test.")
+        elif tfidf_vectorizer is None or nb_model is None:
+            st.error("Model inference is currently unavailable due to loading errors.")
         else:
-            with st.spinner("Processing text and contacting FastAPI Inference Server..."):
+            with st.spinner("Processing review text and running local inference..."):
                 try:
-                    payload = {"review": review_input}
-                    resp = requests.post(f"{api_url}/predict", json=payload)
+                    # Clean text
+                    cleaned = clean_text(review_input)
                     
-                    if resp.status_code == 200:
-                        pred_data = resp.json()
-                        sentiment = pred_data.get("sentiment")
-                        confidence = pred_data.get("confidence", 0.0) * 100
-                        probabilities = pred_data.get("probabilities", {})
+                    # Vectorize
+                    features = tfidf_vectorizer.transform([cleaned])
+                    
+                    # Predict using local Naive Bayes
+                    pred_label_idx = nb_model.predict(features)[0]
+                    pred_probs = nb_model.predict_proba(features)[0]
+                    
+                    sentiment_labels = ['negative', 'neutral', 'positive']
+                    sentiment = sentiment_labels[pred_label_idx]
+                    confidence = float(pred_probs[pred_label_idx]) * 100
+                    
+                    probabilities = {
+                        'negative': float(pred_probs[0]),
+                        'neutral': float(pred_probs[1]),
+                        'positive': float(pred_probs[2])
+                    }
+                    
+                    # Apply CSS styling class based on predicted sentiment
+                    class_name = "pred-neu"
+                    if sentiment == "positive":
+                        class_name = "pred-pos"
+                    elif sentiment == "negative":
+                        class_name = "pred-neg"
                         
-                        # Apply CSS styling class based on predicted sentiment
-                        class_name = "pred-neu"
-                        if sentiment == "positive":
-                            class_name = "pred-pos"
-                        elif sentiment == "negative":
-                            class_name = "pred-neg"
-                            
-                        # Show prediction card
-                        st.markdown(f"""
-                        <div class="prediction-box {class_name}">
-                            <div style="font-size: 24px; text-transform: uppercase;">{sentiment}</div>
-                            <div style="font-size: 14px; font-weight: 300;">Confidence: {confidence:.2f}%</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Render confidence table details
-                        st.write("---")
-                        st.write("Confidence Breakdown per Sentiment Class:")
-                        df_probs = pd.DataFrame({
-                            'Sentiment Class': ['Positive', 'Neutral', 'Negative'],
-                            'Confidence Probability (%)': [
-                                f"{probabilities.get('positive', 0.0)*100:.2f}%",
-                                f"{probabilities.get('neutral', 0.0)*100:.2f}%",
-                                f"{probabilities.get('negative', 0.0)*100:.2f}%"
-                            ]
-                        })
-                        st.table(df_probs)
-                    else:
-                        st.error(f"Prediction server error: Status Code {resp.status_code}. Response: {resp.text}")
+                    # Show prediction card
+                    st.markdown(f"""
+                    <div class="prediction-box {class_name}">
+                        <div style="font-size: 24px; text-transform: uppercase;">{sentiment}</div>
+                        <div style="font-size: 14px; font-weight: 300;">Confidence: {confidence:.2f}%</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Render confidence table details
+                    st.write("---")
+                    st.write("Confidence Breakdown per Sentiment Class:")
+                    df_probs = pd.DataFrame({
+                        'Sentiment Class': ['Positive', 'Neutral', 'Negative'],
+                        'Confidence Probability (%)': [
+                            f"{probabilities.get('positive', 0.0)*100:.2f}%",
+                            f"{probabilities.get('neutral', 0.0)*100:.2f}%",
+                            f"{probabilities.get('negative', 0.0)*100:.2f}%"
+                        ]
+                    })
+                    st.table(df_probs)
                 except Exception as e:
-                    st.error(f"Unable to connect to active FastAPI engine. Details: {str(e)}")
+                    st.error(f"Inference error during processing: {str(e)}")
