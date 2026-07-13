@@ -136,6 +136,7 @@ df_aspects = pd.read_csv(aspect_insights_path)
 
 # Initialize NLTK resources dynamically
 nltk.download('punkt', quiet=True)
+nltk.download('punkt_tab', quiet=True)
 nltk.download('stopwords', quiet=True)
 nltk.download('wordnet', quiet=True)
 nltk.download('omw-1.4', quiet=True)
@@ -180,8 +181,7 @@ try:
     st.sidebar.success("🟢 Local Inference Models Loaded!")
     st.sidebar.info("Dashboard running in serverless mode on Streamlit Cloud.")
 except Exception as e:
-    st.sidebar.error(f"Inference Engine Offline: {str(e)}")
-    st.error(f"Inference Engine Offline: {str(e)}")
+    st.sidebar.error(f"🔴 Error loading models: {str(e)}")
     tfidf_vectorizer, nb_model = None, None
 
 # ==========================================
