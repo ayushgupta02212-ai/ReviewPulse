@@ -1,0 +1,29 @@
+# Data and raw files
+data/20191226-*.csv
+data/*.zip
+
+# Large ML/DL models and vectorizers
+models/*.pkl
+models/*.model
+models/*.keras
+models/word2vec.model*
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+ENV/
+env/
+
+# IDE files
+.vscode/
+.idea/
+
+# Environment / secret credentials
+.env
+.kaggle/
+kaggle.json
