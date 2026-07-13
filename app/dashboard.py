@@ -180,7 +180,8 @@ try:
     st.sidebar.success("🟢 Local Inference Models Loaded!")
     st.sidebar.info("Dashboard running in serverless mode on Streamlit Cloud.")
 except Exception as e:
-    st.sidebar.error(f"🔴 Error loading models: {str(e)}")
+    st.sidebar.error(f"Inference Engine Offline: {str(e)}")
+    st.error(f"Inference Engine Offline: {str(e)}")
     tfidf_vectorizer, nb_model = None, None
 
 # ==========================================
