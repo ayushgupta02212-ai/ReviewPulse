@@ -132,20 +132,13 @@ df_aspects = pd.read_csv(aspect_insights_path)
 # ==========================================
 
 # Initialize NLTK resources dynamically
+nltk.download('punkt', quiet=True)
+nltk.download('stopwords', quiet=True)
+nltk.download('wordnet', quiet=True)
+nltk.download('omw-1.4', quiet=True)
+
 @st.cache_resource
 def setup_nltk():
-    try:
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        nltk.download('stopwords')
-    try:
-        nltk.data.find('corpora/wordnet')
-    except LookupError:
-        nltk.download('wordnet')
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt')
     return set(stopwords.words('english')), WordNetLemmatizer()
 
 stop_words, lemmatizer = setup_nltk()
