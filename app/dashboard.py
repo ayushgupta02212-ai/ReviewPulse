@@ -115,9 +115,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Automatically find the absolute project root folder path
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Check paths
-processed_reviews_path = os.path.join("data", "processed_reviews.csv")
-aspect_insights_path = os.path.join("data", "aspect_insights.csv")
+processed_reviews_path = os.path.join(BASE_DIR, "data", "processed_reviews.csv")
+aspect_insights_path = os.path.join(BASE_DIR, "data", "aspect_insights.csv")
 
 if not os.path.exists(processed_reviews_path) or not os.path.exists(aspect_insights_path):
     st.error("Missing raw dataset files! Please verify that Phase 1 (preprocess.py) and Phase 4 (aspect_extractor.py) have run successfully.")
@@ -155,8 +158,8 @@ def clean_text(text: str) -> str:
 # Cache loading of machine learning models
 @st.cache_resource
 def load_nlp_models():
-    tfidf_path = os.path.join("models", "tfidf_vectorizer.pkl")
-    nb_path = os.path.join("models", "naive_bayes_model.pkl")
+    tfidf_path = os.path.join(BASE_DIR, "models", "tfidf_vectorizer.pkl")
+    nb_path = os.path.join(BASE_DIR, "models", "naive_bayes_model.pkl")
     
     if not os.path.exists(tfidf_path) or not os.path.exists(nb_path):
         raise FileNotFoundError("Model binary files are missing. Ensure vectorize.py and train_models.py have run.")
